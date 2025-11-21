@@ -10,6 +10,8 @@ import time
 import random
 import re
 
+from autils.db.mysql_utils import MySQL
+
 """
 경주 성적: url0="http://race.kra.co.kr/raceScore/ScoretableDetailList.do?meet=1&realRcDate=20170212&realRcNo=1"
 폐출혈: url1="http://race.kra.co.kr/chulmainfo/chulmaDetailInfoAccessoryState.do?Act=02&Sub=1&meet=1&rcNo=3&rcDate="+date
@@ -20,85 +22,8 @@ import re
 미검: /racehorse/profileList.do?Sub=1&meet=1&Act=07&rank=%BF%DC%B9%CC%B0%CB&csdkfjsf9ZVx11ja8a=skd8ahd8sh1sd1s
 """
 
-db_conf = {
-"host": "127.0.0.1",
-"user": "test",
-"password": "test11",
-"database": "flask1",
-}
 
-def create_table(db_conf):
-    """
-    데이터를 저장할 mysql테이블을 만듭니다.
-    :param db_conf: DB접속정보
-    :return:
-    """
-
-    con=pymysql.connect(**db_conf)
-    cur=con.cursor()
-    
-    # 기존 테이블 삭제 후 재생성 (스키마 변경을 위해)
-    cur.execute("DROP TABLE IF EXISTS hr_result")
-    
-    cur.execute("""
-        CREATE TABLE hr_result  
-        (
-            순위 VARCHAR(10),
-            마번 VARCHAR(10),
-            마명 VARCHAR(30),
-            산지 VARCHAR(20),
-            성별 VARCHAR(10),
-            연령 VARCHAR(5),
-            중량 VARCHAR(5),
-            레이팅 VARCHAR(5),
-            기수명 VARCHAR(30),
-            조교사명 VARCHAR(30),
-            마주명 VARCHAR(50),
-            도착차 VARCHAR(50),
-            마체중 VARCHAR(10),
-            단승 VARCHAR(10),
-            연승 VARCHAR(10),
-            복승 VARCHAR(10),
-            쌍승 VARCHAR(10),
-            복연승 VARCHAR(10),
-            삼복승 VARCHAR(10),
-            삼쌍승 VARCHAR(10),
-            장구현황 VARCHAR(100),
-            S1F_G1F VARCHAR(100),
-            S_1F VARCHAR(50),
-            1코너 VARCHAR(50),
-            2코너 VARCHAR(50),
-            3코너 VARCHAR(50),
-            G_3F VARCHAR(50),
-            4코너 VARCHAR(50),
-            G_1F VARCHAR(50),
-            3F_G VARCHAR(50),
-            1F_G VARCHAR(50),
-            10_8F VARCHAR(50),
-            8_6F VARCHAR(50),
-            6_4F VARCHAR(50),
-            4_2F VARCHAR(50),
-            2F_G VARCHAR(50),
-            day VARCHAR(50),
-            day_th VARCHAR(20),
-            weather VARCHAR(20),
-            race_st VARCHAR(10),
-            race_time VARCHAR(10),
-            race_infor1 VARCHAR(10),
-            distance VARCHAR(10),
-            race_infor2 VARCHAR(10),
-            race_infor3 VARCHAR(30),
-            race_infor4 VARCHAR(10),
-            race_infor5 VARCHAR(10),
-            primary key (day,day_th,마명)
-        )
-        """)
-    con.commit()
-    con.close()
-
-    return 1
-
-def collect_race(location,date,rc_no,try_cnt):
+def collect_race_result(location,date,rc_no,try_cnt):
     """
     경기결과 수집 (pandas read_html 방식으로 업데이트)
     :param location: 서울1, 부산3
@@ -279,7 +204,7 @@ def collect_race(location,date,rc_no,try_cnt):
     except Exception as e:
         logging.error(f"데이터 수집 중 오류 발생: {e}")
         if try_cnt < 3:
-            hr_1 = collect_race(location, date, rc_no, try_cnt+1)
+            hr_1 = collect_race_result(location, date, rc_no, try_cnt+1)
             return hr_1
         else:
             return pd.DataFrame()
@@ -360,26 +285,12 @@ def insert_table(hr_1, db_conf):
 
     return 1
 
-
-
-
-
-
-
-
-
-
-
-
-    return 1
-
 if __name__ == '__main__':
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     # 테이블 생성
-    create_table(db_conf)
-
+    # create_table(db_conf)    
     # 최신 날짜로 테스트 (2024년 12월 1일)
     date = "20241201"
 
@@ -387,30 +298,38 @@ if __name__ == '__main__':
     # location_list = [1, 3]
     location_list = [3]
 
-    print(f"=== 경마 데이터 수집 시작 ===")
-    print(f"수집 날짜: {date}")
+    df = collect_race_result(1, '20251115', 1, 1)
+    print(df)
+    print(df.head().T)
+    df = df[['순위', '마번', '마명', '산지', '성별', '연령', '중량', '레이팅', '기수명', '조교사명', '마주명', '도착차', '마체중', '단승', '연승', '복승', '쌍승', '복연승', '삼복승', '삼쌍승', '장구현황', 'S1F_G1F', 'S_1F', '1코너', '2코너', '3코너', 'G_3F', '4코너', 'G_1F', '3F_G', '1F_G', '10_8F', '8_6F', '6_4F', '4_2F', '2F_G', 'day', 'day_th', 'weather', 'race_st', 'race_time', 'race_infor1', 'distance', 'race_infor2', 'race_infor3', 'race_infor4', 'race_infor5']]
+
+    ms = MySQL()
+    ms.insert_df_to_table(df, "hr_result")
+
+    # print(f"=== 경마 데이터 수집 시작 ===")
+    # print(f"수집 날짜: {date}")
     
-    for l in location_list:
-        location_name = "서울" if l == 1 else "부산"
-        print(f"\n--- {location_name} 경마장 데이터 수집 ---")
+    # for l in location_list:
+    #     location_name = "서울" if l == 1 else "부산"
+    #     print(f"\n--- {location_name} 경마장 데이터 수집 ---")
         
-        for rc_no in range(1, 20):
-            try:
-                hr_1 = collect_race(l, date, rc_no, 1)
+    #     for rc_no in range(1, 20):
+    #         try:
+    #             hr_1 = collect_race(l, date, rc_no, 1)
                 
-                if len(hr_1) == 0:
-                    print(f"{location_name} {rc_no}번 경주: 데이터 없음 (경주 종료)")
-                    break
-                else:
-                    print(f"✅ {location_name} {rc_no}번 경주: {len(hr_1)}마리 데이터 수집 성공")
+    #             if len(hr_1) == 0:
+    #                 print(f"{location_name} {rc_no}번 경주: 데이터 없음 (경주 종료)")
+    #                 break
+    #             else:
+    #                 print(f"✅ {location_name} {rc_no}번 경주: {len(hr_1)}마리 데이터 수집 성공")
                     
-                    # 데이터베이스에 저장
-                    insert_table(hr_1, db_conf)
-                    print(f"   데이터베이스 저장 완료")
+    #                 # 데이터베이스에 저장
+    #                 insert_table(hr_1, db_conf)
+    #                 print(f"   데이터베이스 저장 완료")
                     
-            except Exception as e:
-                logging.error(f"{location_name} {rc_no}번 경주 수집 중 오류: {e}")
-                print(f"❌ {location_name} {rc_no}번 경주: 오류 발생")
-                break
+    #         except Exception as e:
+    #             logging.error(f"{location_name} {rc_no}번 경주 수집 중 오류: {e}")
+    #             print(f"❌ {location_name} {rc_no}번 경주: 오류 발생")
+    #             break
     
-    print(f"\n=== 데이터 수집 완료 ===")
+    # print(f"\n=== 데이터 수집 완료 ===")
