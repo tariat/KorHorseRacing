@@ -23,11 +23,11 @@ from autils.db.mysql_utils import MySQL
 """
 
 
-def collect_race_result(location,date,rc_no,try_cnt):
+def collect_race_result(location, bas_dt, rc_no, try_cnt):
     """
     경기결과 수집 (pandas read_html 방식으로 업데이트)
     :param location: 서울1, 부산3
-    :param date: 날짜
+    :param bas_dt: 기준일자(YYYYMMDD)
     :param rc_no: 경기번호
     :return: 1: 수집결과, 정상수집이 안 되면 행이 0인 데이터프레임을 return
     """
@@ -39,14 +39,14 @@ def collect_race_result(location,date,rc_no,try_cnt):
         return pd.DataFrame()
 
     try:
-        url="http://race.kra.co.kr/raceScore/ScoretableDetailList.do?meet={}&realRcDate={}&realRcNo={}".format(location,date,rc_no)
+        url="http://race.kra.co.kr/raceScore/ScoretableDetailList.do?meet={}&realRcDate={}&realRcNo={}".format(location,bas_dt,rc_no)
         logging.info("{} data collect start".format(url))
 
         # pandas read_html로 테이블 추출 (인코딩 지정)
         tables = pd.read_html(url, encoding='euc-kr')
         
         if len(tables) < 4:
-            logging.info("{}, {}, {} 데이터는 없습니다.".format(date,location,rc_no))
+            logging.info("{}, {}, {} 데이터는 없습니다.".format(bas_dt,location,rc_no))
             return pd.DataFrame()
 
         # 경주 정보 추출 (테이블 0)
@@ -59,7 +59,7 @@ def collect_race_result(location,date,rc_no,try_cnt):
         record_detail = tables[3].copy()
         
         if len(hr_stat) == 0:
-            logging.info("{}, {}, {} 경주 결과 데이터는 없습니다.".format(date,location,rc_no))
+            logging.info("{}, {}, {} 경주 결과 데이터는 없습니다.".format(bas_dt,location,rc_no))
             return pd.DataFrame()
 
         # 컬럼명 정리
@@ -189,6 +189,9 @@ def collect_race_result(location,date,rc_no,try_cnt):
         hr_1["race_infor3"] = str(race_infor3).strip()
         hr_1["race_infor4"] = str(race_infor4).strip()
         hr_1["race_infor5"] = str(race_infor5).strip()
+        hr_1["BAS_DT"] = str(bas_dt).strip()
+        hr_1["rc_no"] = rc_no
+        hr_1["meet"] = location
         
         # 배당 정보 추가
         hr_1["단승"] = div.get("단승식", "")
@@ -204,60 +207,31 @@ def collect_race_result(location,date,rc_no,try_cnt):
     except Exception as e:
         logging.error(f"데이터 수집 중 오류 발생: {e}")
         if try_cnt < 3:
-            hr_1 = collect_race_result(location, date, rc_no, try_cnt+1)
+            hr_1 = collect_race_result(location, bas_dt, rc_no, try_cnt+1)
             return hr_1
         else:
             return pd.DataFrame()
 
 def insert_table(hr_1, db_conf):
 
-    # 실제 존재하는 컬럼만 선택하여 데이터베이스에 저장
-    required_columns = ["순위", "마번", "마명", "산지", "성별", "연령", "중량", "레이팅", 
-                       "기수명", "조교사명", "마주명", "도착차", "마체중", "단승", "연승", 
-                       "복승", "쌍승", "복연승", "삼복승", "삼쌍승", "장구현황", "S1F_G1F", 
-                       "S_1F", "1코너", "2코너", "3코너", "G_3F", "4코너", "G_1F", "3F_G", 
-                       "1F_G", "10_8F", "8_6F", "6_4F", "4_2F", "2F_G", "day", "day_th", 
-                       "weather", "race_st", "race_time", "race_infor1", "distance", 
-                       "race_infor2", "race_infor3", "race_infor4", "race_infor5"]
+    required_columns = [
+        "BAS_DT", "meet", "rc_no",
+        "순위", "마번", "마명", "산지", "성별", "연령", "중량", "레이팅",
+        "기수명", "조교사명", "마주명", "도착차", "마체중", "단승", "연승",
+        "복승", "쌍승", "복연승", "삼복승", "삼쌍승", "장구현황", "S1F_G1F",
+        "S_1F", "1코너", "2코너", "3코너", "G_3F", "4코너", "G_1F", "3F_G",
+        "1F_G", "10_8F", "8_6F", "6_4F", "4_2F", "2F_G", "day", "day_th",
+        "weather", "race_st", "race_time", "race_infor1", "distance",
+        "race_infor2", "race_infor3", "race_infor4", "race_infor5"
+    ]
     
-    # 존재하지 않는 컬럼 처리
     for col in required_columns:
         if col not in hr_1.columns:
             hr_1[col] = ""
-            
-    # 지역별로 다른 컬럼 구조 처리
-    available_columns = [col for col in required_columns if col in hr_1.columns]
-    hr_2 = hr_1[available_columns]
-    
-    # 부산/서울 공통 47개 컬럼로 맞추기 (부산의 추가 컬럼 제거)
-    if len(hr_2.columns) > 47:
-        # 중복 컬럼이나 추가 컬럼 제거
-        if '경주 기록' in hr_2.columns:
-            hr_2 = hr_2.drop(columns=['경주 기록'])
-        # 2F_G 중복 제거 (첫 번째 것만 유지)
-        if hr_2.columns.tolist().count('2F_G') > 1:
-            # 중복된 컬럼 중 뒤의 것들을 제거
-            cols = hr_2.columns.tolist()
-            first_2f_g_idx = cols.index('2F_G')
-            duplicate_cols = []
-            for i, col in enumerate(cols):
-                if col == '2F_G' and i > first_2f_g_idx:
-                    duplicate_cols.append(i)
-            if duplicate_cols:
-                hr_2 = hr_2.iloc[:, [i for i in range(len(cols)) if i not in duplicate_cols]]
-    
-    # 47개 컬럼이 되도록 부족한 컬럼 추가
-    while len(hr_2.columns) < 47:
-        missing_col = f"missing_col_{len(hr_2.columns)}"
-        hr_2[missing_col] = ""
-    
-    # NaN 값을 빈 문자열로 변환
-    hr_2 = hr_2.fillna("")
-    
-    # 데이터 타입을 문자열로 변환하여 MySQL 호환성 확보
-    hr_2 = hr_2.astype(str)
 
-    hr_2_list=hr_2.values.tolist()
+    hr_2 = hr_1[required_columns]
+    hr_2 = hr_2.fillna("").astype(str)
+    hr_2_list = hr_2.values.tolist()
 
     db_conf = {
         "host": "127.0.0.1",
@@ -273,13 +247,9 @@ def insert_table(hr_1, db_conf):
             if isinstance(value, str) and len(value) > 200:  # 너무 긴 문자열은 자르기
                 row[i] = value[:200]
     
-    cur.executemany("""REPLACE INTO hr_result VALUES
-                       (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                        %s,%s,%s,%s,%s,%s,%s
-                       )""", hr_2_list)
+    col_list = ", ".join(f"`{c}`" for c in required_columns)
+    placeholders = ", ".join(["%s"] * len(required_columns))
+    cur.executemany(f"REPLACE INTO hr_result ({col_list}) VALUES ({placeholders})", hr_2_list)
     con.commit()
     con.close()
 
@@ -289,19 +259,21 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    # 테이블 생성
-    # create_table(db_conf)    
-    # 최신 날짜로 테스트 (2024년 12월 1일)
-    date = "20241201"
+    bas_dt = "20241201"
 
-    # location 1은 서울, 3은 부산
-    # location_list = [1, 3]
-    location_list = [3]
-
-    df = collect_race_result(1, '20251115', 1, 1)
+    df = collect_race_result(1, bas_dt, 1, 1)
     print(df)
     print(df.head().T)
-    df = df[['순위', '마번', '마명', '산지', '성별', '연령', '중량', '레이팅', '기수명', '조교사명', '마주명', '도착차', '마체중', '단승', '연승', '복승', '쌍승', '복연승', '삼복승', '삼쌍승', '장구현황', 'S1F_G1F', 'S_1F', '1코너', '2코너', '3코너', 'G_3F', '4코너', 'G_1F', '3F_G', '1F_G', '10_8F', '8_6F', '6_4F', '4_2F', '2F_G', 'day', 'day_th', 'weather', 'race_st', 'race_time', 'race_infor1', 'distance', 'race_infor2', 'race_infor3', 'race_infor4', 'race_infor5']]
+    df = df[[
+        "BAS_DT", "meet", "rc_no",
+        '순위', '마번', '마명', '산지', '성별', '연령', '중량', '레이팅',
+        '기수명', '조교사명', '마주명', '도착차', '마체중', '단승', '연승',
+        '복승', '쌍승', '복연승', '삼복승', '삼쌍승', '장구현황', 'S1F_G1F',
+        'S_1F', '1코너', '2코너', '3코너', 'G_3F', '4코너', 'G_1F', '3F_G',
+        '1F_G', '10_8F', '8_6F', '6_4F', '4_2F', '2F_G', 'day', 'day_th',
+        'weather', 'race_st', 'race_time', 'race_infor1', 'distance',
+        'race_infor2', 'race_infor3', 'race_infor4', 'race_infor5'
+    ]]
 
     ms = MySQL()
     ms.insert_df_to_table(df, "hr_result")

@@ -6,6 +6,9 @@ ms = MySQL()
 ms.execute("""
     CREATE TABLE hr_result  
     (
+        BAS_DT VARCHAR(10),
+        meet VARCHAR(5),
+        rc_no VARCHAR(5),
         순위 VARCHAR(10),
         마번 VARCHAR(10),
         마명 VARCHAR(30),
@@ -53,6 +56,6 @@ ms.execute("""
         race_infor3 VARCHAR(30),
         race_infor4 VARCHAR(10),
         race_infor5 VARCHAR(10),
-        primary key (day,day_th,마명)
+        primary key (BAS_DT, meet, rc_no, 마명)
     )
     """)
