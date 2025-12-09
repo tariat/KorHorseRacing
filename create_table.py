@@ -56,6 +56,29 @@ ms.execute("""
         race_infor3 VARCHAR(30),
         race_infor4 VARCHAR(10),
         race_infor5 VARCHAR(10),
-        primary key (BAS_DT, meet, rc_no, 마명)
+        primary key (BAS_DT, meet, rc_no, 마번)
     )
     """)
+
+ms.execute("""CREATE TABLE IF NOT EXISTS hr_entry
+           (`번호` VARCHAR(255),
+            `마명` VARCHAR(255),
+            `산지` VARCHAR(255),
+            `성별` VARCHAR(255),
+            `연령` VARCHAR(255),
+            `레이팅` VARCHAR(255),
+            `중량` VARCHAR(255),
+            `증감` VARCHAR(255),
+            `기수명` VARCHAR(255),
+            `조교사명` VARCHAR(255),
+            `마주명` VARCHAR(255),
+            `조교횟수` VARCHAR(255),
+            `출전주기` VARCHAR(255),
+            `장구현황` VARCHAR(255),
+            `특이사항` VARCHAR(255),
+            `BAS_DT` VARCHAR(255),
+            `rc_no` VARCHAR(255),
+            `meet` VARCHAR(255),
+            PRIMARY KEY (`BAS_DT`, `rc_no`, `meet`, `마번`)
+           )""")
+

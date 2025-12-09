@@ -53,7 +53,7 @@ def collect_stewards_report(location: int, bas_dt: str, rc_no: int, try_cnt: int
 
 def _ensure_table(ms: MySQL, table_name: str, columns: pd.Index) -> None:
     col_defs = ", ".join(f"`{c}` VARCHAR(255)" for c in columns)
-    pk_candidates = [c for c in ["BAS_DT", "rc_no", "meet", "마번", "번호"] if c in columns]
+    pk_candidates = [c for c in ["BAS_DT", "rc_no", "meet", "마번"] if c in columns]
     create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({col_defs}"
     if pk_candidates:
         pk = ", ".join(f"`{c}`" for c in pk_candidates)

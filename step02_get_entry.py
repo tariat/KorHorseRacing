@@ -76,14 +76,13 @@ def collect_entry(location: int, bas_dt: str, rc_no: int, try_cnt: int = 1) -> p
 def _ensure_table(ms: MySQL, table_name: str, columns: pd.Index) -> None:
     """필요한 테이블이 없으면 생성한다."""
     col_defs = ", ".join(f"`{c}` VARCHAR(255)" for c in columns)
-    pk_candidates = [c for c in ["BAS_DT", "rc_no", "meet", "마번", "번호"] if c in columns]
+    pk_candidates = [c for c in ["BAS_DT", "rc_no", "meet", "마번"] if c in columns]
 
     create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({col_defs}"
     if pk_candidates:
         pk = ", ".join(f"`{c}`" for c in pk_candidates)
         create_sql += f", PRIMARY KEY ({pk})"
     create_sql += ") CHARACTER SET utf8mb4"
-
     ms.execute(create_sql)
 
 
